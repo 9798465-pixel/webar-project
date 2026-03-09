@@ -3,29 +3,27 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>AR Project</title>
+    <title>WebAR Project</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar.js"></script>
 </head>
 
-<body style="margin: 0px; overflow: hidden; background-color: #000;">
+<body style="margin: 0; overflow: hidden; background-color: #000;">
 
-    <div id="access" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #fff; z-index: 9999; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-        <div style="text-align: center; font-family: Arial, sans-serif;">
-            <p style="font-size: 24px;">PRESS HERE</p>
-            <p>TO START AR</p>
+    <div id="access" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; color: #fff; z-index: 10000; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid red;">
+        <div style="text-align: center; font-family: sans-serif;">
+            <h1 style="font-size: 30px;">CLICK HERE TO START</h1>
+            <p>Нажми на экран, чтобы включить камеру</p>
         </div>
     </div>
 
     <script>
-        const access = document.getElementById('access');
-
-        access.addEventListener('click', () => {
-            access.style.display = 'none'; // Скрываем слой сразу после клика
-            initAR();
+        document.getElementById('access').addEventListener('click', function() {
+            this.style.display = 'none';
+            initApp();
         });
 
-        function initAR() {
+        function initApp() {
             const scene = new THREE.Scene();
             const camera = new THREE.Camera();
             scene.add(camera);
@@ -33,15 +31,12 @@
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.domElement.style.position = 'absolute';
-            renderer.domElement.style.top = '0px';
-            renderer.domElement.style.left = '0px';
+            renderer.domElement.style.top = '0';
             document.body.appendChild(renderer.domElement);
 
-            const clock = new THREE.Clock();
             const listener = new THREE.AudioListener();
             camera.add(listener);
 
-            // Инициализация камеры
             const arSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
             arSource.init(() => {
                 setTimeout(() => {
@@ -50,50 +45,44 @@
                 }, 2000);
             });
 
-            // Параметры камеры из твоей папки data
             const arContext = new THREEx.ArToolkitContext({
                 cameraParametersUrl: 'data/camera_para.dat',
                 detectionMode: 'mono_and_matrix',
                 matrixCodeType: '3x3',
             });
-
             arContext.init(() => {
                 camera.projectionMatrix.copy(arContext.getProjectionMatrix());
             });
 
-            // Данные твоих маркеров
-            const markerData = [
+            // Настройка контента
+            const markers = [
                 { id: 1, img: "author.jpg", audio: "author.mp3" },
                 { id: 2, img: "bissaker.jpg", audio: "bissaker.mp3" },
                 { id: 3, img: "device.jpg", audio: "principle.mp3" }
             ];
 
-            const audioMap = new Map();
             const texLoader = new THREE.TextureLoader();
             const audioLoader = new THREE.AudioLoader();
+            const sounds = new Map();
 
-            markerData.forEach(data => {
+            markers.forEach(m => {
                 const markerRoot = new THREE.Group();
                 scene.add(markerRoot);
+                new THREEx.ArMarkerControls(arContext, markerRoot, { type: 'barcode', barcodeValue: m.id });
 
-                new THREEx.ArMarkerControls(arContext, markerRoot, {
-                    type: 'barcode', barcodeValue: data.id
+                texLoader.load(m.img, (tex) => {
+                    const plane = new THREE.Mesh(
+                        new THREE.PlaneBufferGeometry(1.5, 1.5),
+                        new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+                    );
+                    plane.rotation.x = -Math.PI / 2;
+                    markerRoot.add(plane);
                 });
 
-                // Картинка
-                texLoader.load(data.img, (texture) => {
-                    const geometry = new THREE.PlaneBufferGeometry(1.2, 1.2);
-                    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    mesh.rotation.x = -Math.PI / 2;
-                    markerRoot.add(mesh);
-                });
-
-                // Звук
-                audioLoader.load(data.audio, (buffer) => {
-                    const sound = new THREE.Audio(listener);
-                    sound.setBuffer(buffer);
-                    audioMap.set(data.id, sound);
+                audioLoader.load(m.audio, (buffer) => {
+                    const s = new THREE.Audio(listener);
+                    s.setBuffer(buffer);
+                    sounds.set(m.id, s);
                 });
             });
 
@@ -101,11 +90,9 @@
                 requestAnimationFrame(animate);
                 if (arSource.ready) {
                     arContext.update(arSource.domElement);
-                    
-                    markerData.forEach(data => {
-                        const s = audioMap.get(data.id);
-                        // Проверка видимости маркера
-                        if (arContext.arController.barcodeMarkers[data.id].inCurrent) {
+                    markers.forEach(m => {
+                        const s = sounds.get(m.id);
+                        if (arContext.arController && arContext.arController.barcodeMarkers[m.id].inCurrent) {
                             if (s && !s.isPlaying) s.play();
                         } else {
                             if (s && s.isPlaying) s.stop();
